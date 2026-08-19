@@ -1,0 +1,135 @@
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  LayoutDashboard,
+  ListChecks,
+  Banknote,
+  LifeBuoy,
+  ShieldCheck,
+  LogOut,
+  Menu,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useIsAdmin, useProfile, useSession } from "@/hooks/useAuth";
+import { formatNaira, SUPPORT_EMAIL, SUPPORT_WHATSAPP } from "@/lib/taskearn";
+import { cn } from "@/lib/utils";
+
+const NAV = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/tasks", label: "Tasks", icon: ListChecks },
+  { to: "/withdraw", label: "Withdraw", icon: Banknote },
+  { to: "/support", label: "Support", icon: LifeBuoy },
+] as const;
+
+/** Footer shown on every page with the support contact details. */
+export function SiteFooter() {
+  return (
+    <footer className="border-t border-border px-4 py-5 text-center text-xs text-muted-foreground">
+      WhatsApp Support: {SUPPORT_WHATSAPP} | Email: {SUPPORT_EMAIL}
+    </footer>
+  );
+}
+
+/** Sidebar + header shell used by every signed-in page. */
+export function AppShell({ children }: { children: ReactNode }) {
+  const { user } = useSession();
+  const { data: profile } = useProfile(user?.id);
+  const { data: isAdmin } = useIsAdmin(user?.id);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  async function signOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  }
+
+  const links = (
+    <nav className="flex flex-col gap-1">
+      {NAV.map(({ to, label, icon: Icon }) => (
+        <Link
+          key={to}
+          to={to}
+          onClick={() => setOpen(false)}
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            pathname === to && "bg-sidebar-accent text-sidebar-accent-foreground",
+          )}
+        >
+          <Icon className="size-4" />
+          {label}
+        </Link>
+      ))}
+      {/* Admin Panel link is rendered only for admins — hidden entirely otherwise. */}
+      {isAdmin && (
+        <Link
+          to="/admin"
+          onClick={() => setOpen(false)}
+          className={cn(
+            "mt-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-sidebar-accent",
+            pathname === "/admin" && "bg-sidebar-accent",
+          )}
+        >
+          <ShieldCheck className="size-4" />
+          Admin Panel
+        </Link>
+      )}
+    </nav>
+  );
+
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex flex-1">
+        {/* Desktop sidebar */}
+        <aside className="hidden w-64 shrink-0 flex-col justify-between border-r border-sidebar-border bg-sidebar p-4 md:flex">
+          <div>
+            <Link to="/dashboard" className="mb-6 block">
+              <p className="text-base font-bold tracking-tight">Tumnishe TaskEarn</p>
+              <p className="text-xs text-muted-foreground">Nigeria</p>
+            </Link>
+            {links}
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-lg bg-sidebar-accent p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Balance</p>
+              <p className="text-lg font-bold text-primary">{formatNaira(profile?.balance)}</p>
+            </div>
+            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={signOut}>
+              <LogOut className="size-4" /> Sign out
+            </Button>
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Mobile header */}
+          <header className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
+            <button onClick={() => setOpen((v) => !v)} aria-label="Toggle menu">
+              <Menu className="size-5" />
+            </button>
+            <span className="text-sm font-bold">Tumnishe TaskEarn</span>
+            <span className="text-sm font-semibold text-primary">
+              {formatNaira(profile?.balance)}
+            </span>
+          </header>
+          {open && (
+            <div className="border-b border-border bg-sidebar p-3 md:hidden">
+              {links}
+              <Button variant="ghost" size="sm" className="mt-2 w-full justify-start" onClick={signOut}>
+                <LogOut className="size-4" /> Sign out
+              </Button>
+            </div>
+          )}
+
+          <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 md:px-8">{children}</main>
+          <SiteFooter />
+        </div>
+      </div>
+    </div>
+  );
+}
